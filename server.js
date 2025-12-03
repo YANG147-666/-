@@ -13,6 +13,10 @@ const WX_APP_SECRET = process.env.WX_APP_SECRET || 'ad64dad676f1bb6a6071fcb26985
 const DOMAIN = process.env.DOMAIN || 'https://shake-game-204673-6-1330326648.sh.run.tcloudbase.com';
 const PORT = process.env.PORT || 80;
 
+// 【重要】在这里填入你上传到云开发的视频链接 (必须以 http/https 开头)
+// 比如: 'https://7368-shake-game-123456.tcb.qcloud.la/my-background.mp4'
+const BG_VIDEO_URL = 'https://6b65-key-manager-cloud-7egqyu8d6c8dc9-1330326648.tcb.qcloud.la/%E8%A7%86%E9%A2%91/bg.mp4?sign=31cf8b2581107ef391725e81e70d5fa1&t=1764764686'; 
+
 const GAME_DURATION = 60; 
 const TRACK_MAX_SCORE = 150; 
 
@@ -150,7 +154,7 @@ app.get('/wechat/callback', async (req, res) => {
 });
 
 // =================================================================
-// 🎨 大屏幕 UI V7.4 (修复视频播放 & 赛道遮挡)
+// 🎨 大屏幕 UI V7.5 (支持云存储视频链接)
 // =================================================================
 app.get('/', (req, res) => {
     const mobileUrl = `${DOMAIN}/mobile`;
@@ -168,9 +172,7 @@ app.get('/', (req, res) => {
         .hidden { display: none !important; }
         .force-hide { display: none !important; }
 
-        /* ==================== 
-           视频背景层 (独立于任何 View，确保始终加载) 
-           ==================== */
+        /* 视频背景层 */
         #bg-layer {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -100;
         }
@@ -197,7 +199,7 @@ app.get('/', (req, res) => {
         }
         @keyframes popIn { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-        /* ==================== 大厅 ==================== */
+        /* 大厅 */
         #view-lobby {
             position: absolute; width: 100%; height: 100%; z-index: 10;
             font-family: 'Microsoft YaHei', sans-serif; display: flex; 
@@ -242,7 +244,7 @@ app.get('/', (req, res) => {
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
 
-        /* ==================== 赛马场 ==================== */
+        /* 赛马场 */
         #view-race {
             position: absolute; width: 100%; height: 100%; z-index: 20; display: none;
             background: radial-gradient(circle at center, #1e6b36 0%, #0d3819 100%);
@@ -262,24 +264,19 @@ app.get('/', (req, res) => {
             height: 75vh; overflow-y: auto; z-index: 10;
         }
         
-        /* 修复：赛道增加高度，防止遮挡 */
         .lane-horse {
-            height: 80px; /* 增高到 80px */
-            margin-bottom: 10px; /* 间距减小 */
-            position: relative;
+            height: 80px; margin-bottom: 10px; position: relative;
             background: rgba(0, 0, 0, 0.2); 
             border-bottom: 2px solid rgba(255,255,255,0.2);
             display: flex; align-items: center;
-            overflow: visible; /* 关键：允许马头伸出去 */
+            overflow: visible; 
         }
         
         .start-line { position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: white; z-index: 1; }
         .finish-line { position: absolute; right: 0; top: 0; bottom: 0; width: 10px; background-image: repeating-linear-gradient(45deg, #000 0, #000 10px, #fff 10px, #fff 20px); z-index: 1; }
 
-        /* 修复：马的位置和层级 */
         .horse-runner {
-            position: absolute; left: 0; 
-            top: 50%; transform: translateY(-50%); /* 垂直居中 */
+            position: absolute; left: 0; top: 50%; transform: translateY(-50%);
             width: 100px; height: 80px;
             transition: left 0.3s linear;
             z-index: 500; 
@@ -306,9 +303,16 @@ app.get('/', (req, res) => {
             border-radius: 10px; font-size: 0.8rem; white-space: nowrap;
             z-index: 12;
         }
-        
+        .dust {
+            position: absolute; bottom: 5px; left: -10px;
+            font-size: 1.5rem; opacity: 0.6;
+            animation: fadeOut 0.6s infinite linear;
+            z-index: 9;
+        }
+
         @keyframes gallop { 0% { transform: scaleX(-1) rotate(0deg) translateY(0); } 100% { transform: scaleX(-1) rotate(-5deg) translateY(-5px); } }
         @keyframes bounce { 0% { transform: translateY(0); } 100% { transform: translateY(-5px); } }
+        @keyframes fadeOut { 0% { opacity: 0.8; transform: translateX(0); } 100% { opacity: 0; transform: translateX(-20px); } }
         @keyframes float { 0%,100%{transform: translateY(0);} 50%{transform: translateY(-10px);} }
 
         /* 结算 */
@@ -334,9 +338,11 @@ app.get('/', (req, res) => {
     </style>
 </head>
 <body>
-    <!-- 修复：视频移出所有视图容器，独立作为背景 -->
     <div id="bg-layer">
-        <video autoplay muted loop playsinline class="video-bg"><source src="/bg.mp4" type="video/mp4"></video>
+        <!-- 核心修改：这里使用变量，确保链接被正确替换 -->
+        <video autoplay muted loop playsinline class="video-bg">
+            <source src="${BG_VIDEO_URL}" type="video/mp4">
+        </video>
         <div class="video-mask"></div>
     </div>
     
@@ -358,8 +364,10 @@ app.get('/', (req, res) => {
 
     <!-- 2. 赛马场 -->
     <div id="view-race">
+        <div class="track-bg-lines"></div>
         <div class="timer-panel"><div id="timer-num">60</div><div class="timer-label">冲刺倒计时</div></div>
         <div id="barrage-container" style="position:absolute; top:10%; width:100%; height:30%; overflow:hidden; pointer-events:none"></div>
+        
         <div class="track-area" id="tracks"></div>
     </div>
 
@@ -422,7 +430,7 @@ app.get('/', (req, res) => {
             players.forEach((p, idx) => {
                 const lane = document.createElement('div');
                 lane.className = 'lane-horse';
-                lane.style.zIndex = 100 - idx; // 修复：动态 Z-index 解决遮挡
+                lane.style.zIndex = 100 - idx; // 动态 Z-index
 
                 let pct = (p.score / leaderScore) * 90; 
                 if(pct > 92) pct = 92; 
@@ -430,6 +438,7 @@ app.get('/', (req, res) => {
                 lane.innerHTML = \`
                     <div class="start-line"></div>
                     <div class="finish-line"></div>
+                    
                     <div class="horse-runner" style="left: \${pct}%">
                         <div class="runner-name">\${p.name}</div>
                         <div class="horse-body">🏇</div>
@@ -471,17 +480,17 @@ app.get('/', (req, res) => {
             if (state === 'waiting') {
                 viewLobby.style.display = 'flex'; viewRace.style.display = 'none'; viewResult.style.display = 'none';
                 qrBox.classList.remove('force-hide'); cdOverlay.classList.add('force-hide'); timerNum.innerText = '60';
-                bgLayer.style.display = 'block'; // 显示视频背景
+                bgLayer.style.display = 'block'; 
             } else if (state === 'countdown') {
                 viewLobby.style.display = 'none'; viewRace.style.display = 'block'; viewResult.style.display = 'none';
                 qrBox.classList.add('force-hide'); cdOverlay.classList.remove('force-hide');
             } else if (state === 'racing') {
                 viewLobby.style.display = 'none'; viewRace.style.display = 'block'; viewResult.style.display = 'none';
                 qrBox.classList.add('force-hide'); cdOverlay.classList.add('force-hide');
-                bgLayer.style.display = 'none'; // 隐藏视频背景，使用绿色草坪
+                bgLayer.style.display = 'none'; 
             } else if (state === 'finished') {
                 viewRace.style.display = 'none'; viewResult.style.display = 'block'; qrBox.classList.add('force-hide');
-                bgLayer.style.display = 'none'; // 保持隐藏
+                bgLayer.style.display = 'none'; 
             }
         });
 
