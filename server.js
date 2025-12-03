@@ -55,20 +55,21 @@ io.on('connection', (socket) => {
         gameState = 'countdown';
         io.emit('game_state_change', 'countdown');
         
-        // --- 修复倒计时逻辑 ---
+        // 倒计时逻辑优化
         let prepCount = 3;
-        io.emit('countdown_tick', prepCount); // 立即显示 3
+        io.emit('countdown_tick', prepCount); // 立即发 3
         
         countdownTimer = setInterval(() => {
             prepCount--;
-            if (prepCount < 0) {
-                // 倒计时结束，进入比赛
+            io.emit('countdown_tick', prepCount); // 发 2, 1, 0
+            
+            if (prepCount <= 0) {
                 clearInterval(countdownTimer);
                 countdownTimer = null;
-                startGameLogic(); 
-            } else {
-                // 广播 2, 1, 0(GO)
-                io.emit('countdown_tick', prepCount);
+                // 稍微延迟一点点进游戏，让 GO 显示一会
+                setTimeout(() => {
+                    startGameLogic(); 
+                }, 500);
             }
         }, 1000);
     });
@@ -153,6 +154,9 @@ app.get('/wechat/callback', async (req, res) => {
     } catch (error) { res.send('登录错误'); }
 });
 
+// =================================================================
+// 🎨 大屏幕 UI V7.3 修复版
+// =================================================================
 app.get('/', (req, res) => {
     const mobileUrl = `${DOMAIN}/mobile`;
     res.send(`
@@ -164,18 +168,44 @@ app.get('/', (req, res) => {
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Exo+2:wght@700&display=swap');
-        body { margin: 0; padding: 0; height: 100vh; overflow: hidden; color: white; }
+        body { margin: 0; padding: 0; height: 100vh; overflow: hidden; color: white; background: #000; }
 
-        /* 强制隐藏类 (最高优先级) */
-        .force-hide { display: none !important; }
+        /* 通用隐藏 */
+        .hidden { display: none !important; }
 
-        /* 大厅 */
+        /* 背景视频层级修复 */
+        .video-bg { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            object-fit: cover; 
+            z-index: 0; /* 提升一点，防止被 body 背景盖住 */
+        }
+        .video-mask { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0, 0, 0, 0.4); 
+            z-index: 1; 
+        }
+
+        /* 倒计时层 - 必须是最高层级 */
+        #countdown-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            z-index: 10000; /* 最高 */
+            display: none; /* 默认隐藏 */
+            justify-content: center; align-items: center;
+        }
+        #countdown-text {
+            font-size: 25rem; font-weight: bold; color: gold;
+            text-shadow: 0 0 50px red, 0 0 20px yellow;
+            font-family: 'Exo 2', sans-serif;
+            animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes popIn { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+        /* ==================== 大厅 ==================== */
         #view-lobby {
             position: absolute; width: 100%; height: 100%; z-index: 10;
             font-family: 'Microsoft YaHei', sans-serif; display: flex; 
         }
-        .video-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; }
-        .video-mask { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.4); z-index: -1; }
         .header-area { position: absolute; top: 5%; width: 100%; text-align: center; }
         .main-title {
             font-family: 'Ma Shan Zheng', cursive; font-size: 8rem; margin: 0;
@@ -210,42 +240,28 @@ app.get('/', (req, res) => {
         .slot-empty { border: 3px dashed rgba(255, 255, 255, 0.6) !important; background: rgba(255, 255, 255, 0.1) !important; }
         .slot-img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
         
-        /* 名字样式修正：单行省略 */
+        /* 修复：大厅名字换行 */
         .slot-name { 
-            margin-top: 10px; font-size: 1.1rem; color: #fff; text-shadow: 1px 1px 2px black; 
+            margin-top: 10px; font-size: 1rem; color: #fff; text-shadow: 1px 1px 2px black; 
             width: 100px; text-align: center;
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            white-space: normal; /* 允许换行 */
+            line-height: 1.2;
+            height: 2.4em; /* 固定两行高度 */
+            overflow: hidden; 
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; /* 两行省略 */
         }
 
-        /* 赛马场 */
+        /* ==================== 赛马场 ==================== */
         #view-race {
             position: absolute; width: 100%; height: 100%; z-index: 20; display: none;
             background: radial-gradient(circle at center, #1e6b36 0%, #0d3819 100%);
             font-family: 'Microsoft YaHei', sans-serif;
         }
-
-        /* 倒计时遮罩 - ZIndex 极高 */
-        #countdown-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8);
-            z-index: 10000; 
-            display: none;
-            justify-content: center; align-items: center;
-        }
-        #countdown-text {
-            font-size: 25rem; font-weight: bold; color: gold;
-            text-shadow: 0 0 50px red;
-            font-family: 'Exo 2', sans-serif;
-            animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-        @keyframes popIn { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-
         .track-bg-lines {
             position: absolute; width: 100%; height: 100%;
             background-image: repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0, rgba(255,255,255,0.05) 2px, transparent 2px, transparent 100px);
             z-index: 0;
         }
-
         .timer-panel {
             position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
             background: rgba(0,0,0,0.6); padding: 10px 40px; border-radius: 20px;
@@ -265,50 +281,43 @@ app.get('/', (req, res) => {
             background: rgba(0, 0, 0, 0.2); 
             border-bottom: 2px solid rgba(255,255,255,0.2);
             display: flex; align-items: center;
+            /* 关键：不设置 overflow:hidden，让马头能伸出去 */
+            overflow: visible; 
         }
         
-        /* 修复：线在最底层 */
-        .start-line { position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: white; z-index: 1; }
-        .finish-line { position: absolute; right: 0; top: 0; bottom: 0; width: 10px; background-image: repeating-linear-gradient(45deg, #000 0, #000 10px, #fff 10px, #fff 20px); z-index: 1; }
+        .start-line { position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: white; z-index: 0; }
+        .finish-line { position: absolute; right: 0; top: 0; bottom: 0; width: 10px; background-image: repeating-linear-gradient(45deg, #000 0, #000 10px, #fff 10px, #fff 20px); z-index: 0; }
 
-        /* 修复：马匹容器 Z-Index 999 且强制 3D 渲染 */
+        /* 修复：马的层级极高 */
         .horse-runner {
-            position: absolute; left: 0; top: -10px;
-            width: 100px; height: 80px;
+            position: absolute; left: 0; top: -15px; /* 稍微往上提 */
+            width: 100px; height: 90px;
             transition: left 0.3s linear;
-            z-index: 999;
-            transform: translateZ(10px); /* 强制图层置顶 */
+            z-index: 100; /* 基础Z值 */
+            pointer-events: none;
         }
-        
         .horse-body {
             font-size: 5rem; position: absolute; bottom: 0; left: 0;
             transform: scaleX(-1);
             filter: drop-shadow(5px 5px 5px rgba(0,0,0,0.5));
             animation: gallop 0.6s infinite alternate ease-in-out;
-            z-index: 10;
         }
-        
         .jockey-avatar {
-            position: absolute; top: 15px; left: 25px;
+            position: absolute; top: 20px; left: 25px;
             width: 45px; height: 45px;
             border-radius: 50%; border: 3px solid gold;
             background: white; object-fit: cover;
             animation: bounce 0.6s infinite alternate ease-in-out;
-            z-index: 11;
         }
-        
         .runner-name {
-            position: absolute; top: -20px; left: 50%; transform: translateX(-50%);
+            position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
             background: rgba(0,0,0,0.6); color: white; padding: 2px 8px;
             border-radius: 10px; font-size: 0.8rem; white-space: nowrap;
-            z-index: 12;
         }
-        
         .dust {
             position: absolute; bottom: 5px; left: -10px;
             font-size: 1.5rem; opacity: 0.6;
             animation: fadeOut 0.6s infinite linear;
-            z-index: 9;
         }
 
         @keyframes gallop { 0% { transform: scaleX(-1) rotate(0deg) translateY(0); } 100% { transform: scaleX(-1) rotate(-5deg) translateY(-5px); } }
@@ -329,18 +338,17 @@ app.get('/', (req, res) => {
         .result-controls { position: absolute; bottom: 30px; width: 100%; text-align: center; }
         .btn-round { padding: 12px 40px; border-radius: 30px; border: none; font-size: 1.2rem; cursor: pointer; color: white; background: linear-gradient(90deg, #ff4081, #f50057); }
         
-        /* 二维码容器 */
         .qr-float { 
             position: absolute; top: 50px; right: 50px; 
             background: rgba(255,255,255,0.95); padding: 10px; border-radius: 10px; 
             text-align: center; color: #333; z-index: 100; 
         }
-        
         .barrage-item { position: absolute; background: rgba(255,255,255,0.1); backdrop-filter: blur(5px); padding: 5px 15px; border-radius: 30px; color: #fff; font-size: 0.9rem; border: 1px solid rgba(255,255,255,0.3); white-space: nowrap; animation: flyRight 6s linear forwards; z-index: 5; }
         @keyframes flyRight { from { left: -20%; } to { left: 110%; } }
     </style>
 </head>
 <body>
+    <!-- 视频背景 -->
     <video autoplay muted loop playsinline class="video-bg"><source src="/bg.mp4" type="video/mp4"></video>
     <div class="video-mask"></div>
     
@@ -349,9 +357,8 @@ app.get('/', (req, res) => {
         <div style="font-size:12px; font-weight:bold; margin-top:5px">扫码加入</div>
     </div>
 
-    <!-- 倒计时遮罩 -->
     <div id="countdown-overlay">
-        <div id="countdown-text"></div>
+        <div id="countdown-text">3</div>
     </div>
 
     <!-- 1. 大厅 -->
@@ -425,11 +432,16 @@ app.get('/', (req, res) => {
             tracksDiv.innerHTML = '';
             const leaderScore = players.length > 0 ? Math.max(players[0].score, TRACK_MAX_SCORE) : TRACK_MAX_SCORE;
 
-            players.forEach((p) => {
+            players.forEach((p, idx) => {
                 const lane = document.createElement('div');
                 lane.className = 'lane-horse';
+                
                 let pct = (p.score / leaderScore) * 90; 
                 if(pct > 92) pct = 92; 
+
+                // 修复：使用动态 z-index，第一条跑道 z-index 最高，依次递减
+                // 这样上面跑道的马如果伸下来，会盖住下面跑道的线
+                lane.style.zIndex = 100 - idx;
 
                 lane.innerHTML = \`
                     <div class="start-line"></div>
@@ -475,28 +487,24 @@ app.get('/', (req, res) => {
         socket.on('game_state_change', (state) => {
             if (state === 'waiting') {
                 viewLobby.style.display = 'flex'; viewRace.style.display = 'none'; viewResult.style.display = 'none';
-                qrBox.classList.remove('force-hide');
-                cdOverlay.classList.add('force-hide'); 
-                timerNum.innerText = '60';
+                qrBox.style.display = 'block'; cdOverlay.style.display = 'none'; timerNum.innerText = '60';
             } else if (state === 'countdown') {
                 viewLobby.style.display = 'none'; viewRace.style.display = 'block'; viewResult.style.display = 'none';
-                qrBox.classList.add('force-hide'); // 强制隐藏二维码
-                cdOverlay.classList.remove('force-hide'); // 显示倒计时
+                qrBox.style.display = 'none'; 
+                // 修复：强制显示倒计时层
+                cdOverlay.style.display = 'flex'; 
             } else if (state === 'racing') {
                 viewLobby.style.display = 'none'; viewRace.style.display = 'block'; viewResult.style.display = 'none';
-                qrBox.classList.add('force-hide'); 
-                cdOverlay.classList.add('force-hide'); 
+                qrBox.style.display = 'none'; cdOverlay.style.display = 'none'; 
             } else if (state === 'finished') {
-                viewRace.style.display = 'none'; viewResult.style.display = 'block';
-                qrBox.classList.add('force-hide'); 
+                viewRace.style.display = 'none'; viewResult.style.display = 'block'; qrBox.style.display = 'none'; 
             }
         });
 
         socket.on('countdown_tick', (count) => {
-            cdOverlay.classList.remove('force-hide');
+            cdOverlay.style.display = 'flex';
             cdText.innerText = count > 0 ? count : 'GO!';
-            cdText.style.animation = 'none';
-            cdText.offsetHeight; 
+            cdText.style.animation = 'none'; cdText.offsetHeight; 
             cdText.style.animation = 'popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
         });
 
@@ -522,6 +530,7 @@ app.get('/', (req, res) => {
     `);
 });
 
+// --- 手机端保持不变 ---
 function renderMobilePage(userInfo) {
     const userJson = JSON.stringify({ nickname: userInfo.nickname, headimgurl: userInfo.headimgurl, openid: userInfo.openid });
     return `
@@ -574,6 +583,7 @@ function renderMobilePage(userInfo) {
     `;
 }
 
+// 添加错误处理
 app.use((err, req, res, next) => {
     console.error('服务器错误:', err);
     res.status(500).send('内部服务器错误');
