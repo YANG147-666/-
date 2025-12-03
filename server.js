@@ -265,11 +265,14 @@ app.get('/', (req, res) => {
         }
         
         .lane-horse {
-            height: 80px; margin-bottom: 10px; position: relative;
+            height: 100px; 
+            margin-bottom: 10px; 
+            position: relative;
             background: rgba(0, 0, 0, 0.2); 
             border-bottom: 2px solid rgba(255,255,255,0.2);
-            display: flex; align-items: center;
-            overflow: visible; 
+            display: flex; 
+            align-items: center;
+            overflow: visible !important; /* 强制设置 */
         }
         
         .start-line { position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: white; z-index: 1; }
