@@ -357,7 +357,9 @@ app.get('/', (req, res) => {
     </style>
 </head>
 <body>
-    <video autoplay loop muted playsinline class="video-bg"><source src="/bg.mp4" type="video/mp4"></video>
+    <video autoplay muted loop playsinline class="video-bg">
+        <source src="/bg.mp4" type="video/mp4">
+    </video>
     <div class="video-mask"></div>
     
     <div id="qr-box" class="qr-float">
