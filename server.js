@@ -279,10 +279,14 @@ app.get('/', (req, res) => {
         .finish-line { position: absolute; right: 0; top: 0; bottom: 0; width: 10px; background-image: repeating-linear-gradient(45deg, #000 0, #000 10px, #fff 10px, #fff 20px); z-index: 1; }
 
         .horse-runner {
-            position: absolute; left: 0; top: 50%; transform: translateY(-50%);
-            width: 100px; height: 80px;
+            position: absolute; 
+            left: 0; top: 50%; 
+            transform: translateY(-50%);
+            width: 100px; 
+            height: 80px;
             transition: left 0.3s linear;
             z-index: 500; 
+            overflow: hidden; /* 添加这一行 */
         }
         
         .horse-body {
