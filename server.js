@@ -340,8 +340,9 @@ app.get('/', (req, res) => {
 <body>
     <div id="bg-layer">
         <!-- 核心修改：这里使用变量，确保链接被正确替换 -->
-        <video autoplay muted loop playsinline class="video-bg">
+        <video autoplay muted loop playsinline webkit-playsinline class="video-bg" preload="auto">
             <source src="${BG_VIDEO_URL}" type="video/mp4">
+            您的浏览器不支持视频播放。
         </video>
         <div class="video-mask"></div>
     </div>
@@ -396,7 +397,63 @@ app.get('/', (req, res) => {
 
         const TRACK_MAX_SCORE = 150;
 
-        function startGame() { socket.emit('admin_start_game'); }
+        // 页面加载完成后尝试播放视频
+        document.addEventListener('DOMContentLoaded', function() {
+            attemptVideoPlay();
+        });
+
+        // 页面可见性改变时尝试播放
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                attemptVideoPlay();
+            }
+        });
+
+        function attemptVideoPlay() {
+            const video = document.querySelector('.video-bg');
+            if (video) {
+                // 设置必要的属性
+                video.muted = true;
+                video.playsInline = true;
+                video.webkitPlaysInline = true;
+                
+                // 尝试播放
+                const playPromise = video.play();
+                if (playPromise !== undefined) {
+                    playPromise.then(_ => {
+                        console.log('视频自动播放成功');
+                    }).catch(error => {
+                        console.log('视频自动播放失败:', error);
+                        // 如果失败，添加一个静默播放处理
+                        handleAutoPlayFailure(video);
+                    });
+                }
+            }
+        }
+
+        function handleAutoPlayFailure(video) {
+            // 创建一个用户交互事件来触发播放
+            const playOnInteraction = () => {
+                video.play().then(() => {
+                    console.log('通过用户交互成功播放视频');
+                }).catch(e => {
+                    console.log('通过用户交互播放视频失败:', e);
+                });
+                
+                // 移除事件监听器
+                document.removeEventListener('touchstart', playOnInteraction);
+                document.removeEventListener('click', playOnInteraction);
+            };
+            
+            // 添加一次性用户交互事件监听器
+            document.addEventListener('touchstart', playOnInteraction, { once: true });
+            document.addEventListener('click', playOnInteraction, { once: true });
+        }
+
+        function startGame() { 
+            console.log('发送开始游戏请求');
+            socket.emit('admin_start_game'); 
+        }
         function resetGame() { socket.emit('admin_reset_game'); }
 
         function renderLobby(players) {
@@ -480,7 +537,9 @@ app.get('/', (req, res) => {
             if (state === 'waiting') {
                 viewLobby.style.display = 'flex'; viewRace.style.display = 'none'; viewResult.style.display = 'none';
                 qrBox.classList.remove('force-hide'); cdOverlay.classList.add('force-hide'); timerNum.innerText = '60';
-                bgLayer.style.display = 'block'; 
+                bgLayer.style.display = 'block';
+                // 回到等待界面时重新尝试播放视频
+                setTimeout(attemptVideoPlay, 100);
             } else if (state === 'countdown') {
                 viewLobby.style.display = 'none'; viewRace.style.display = 'block'; viewResult.style.display = 'none';
                 qrBox.classList.add('force-hide'); cdOverlay.classList.remove('force-hide');
