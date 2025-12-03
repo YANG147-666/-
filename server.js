@@ -190,7 +190,7 @@ app.get('/', (req, res) => {
             background: rgba(0,0,0,0.85);
             z-index: 10000; 
             justify-content: center; align-items: center;
-            display: flex; /* 默认设为flex确保可见 */
+            display: none; /* 初始隐藏 */
         }
         #countdown-text {
             font-size: 25rem; font-weight: bold; color: gold;
@@ -378,7 +378,7 @@ app.get('/', (req, res) => {
         <div style="font-size:12px; font-weight:bold; margin-top:5px">扫码加入</div>
     </div>
 
-    <div id="countdown-overlay" class="force-hide">
+    <div id="countdown-overlay">
         <div id="countdown-text">3</div>
     </div>
 
@@ -562,16 +562,16 @@ app.get('/', (req, res) => {
         socket.on('game_state_change', (state) => {
             if (state === 'waiting') {
                 viewLobby.style.display = 'flex'; viewRace.style.display = 'none'; viewResult.style.display = 'none';
-                qrBox.classList.remove('force-hide'); cdOverlay.classList.add('force-hide'); timerNum.innerText = '60';
+                qrBox.classList.remove('force-hide'); cdOverlay.style.display = 'none'; timerNum.innerText = '60';
                 bgLayer.style.display = 'block';
                 // 回到等待界面时重新尝试播放视频
                 setTimeout(attemptVideoPlay, 100);
             } else if (state === 'countdown') {
                 viewLobby.style.display = 'none'; viewRace.style.display = 'block'; viewResult.style.display = 'none';
-                qrBox.classList.add('force-hide'); cdOverlay.classList.remove('force-hide');
+                qrBox.classList.add('force-hide'); cdOverlay.style.display = 'flex';
             } else if (state === 'racing') {
                 viewLobby.style.display = 'none'; viewRace.style.display = 'block'; viewResult.style.display = 'none';
-                qrBox.classList.add('force-hide'); cdOverlay.classList.add('force-hide');
+                qrBox.classList.add('force-hide'); cdOverlay.style.display = 'none';
                 bgLayer.style.display = 'none'; 
             } else if (state === 'finished') {
                 viewRace.style.display = 'none'; viewResult.style.display = 'block'; qrBox.classList.add('force-hide');
@@ -580,10 +580,10 @@ app.get('/', (req, res) => {
         });
 
         socket.on('countdown_tick', (count) => {
-            cdOverlay.classList.remove('force-hide');
             cdText.innerText = count > 0 ? count : 'GO!';
-            cdText.style.animation = 'none'; 
-            cdText.offsetHeight; 
+            // 重置动画
+            cdText.style.animation = 'none';
+            cdText.offsetHeight; // 触发重排
             cdText.style.animation = 'popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
         });
 
