@@ -261,7 +261,7 @@ app.get('/', (req, res) => {
 
         .track-area { 
             position: absolute; top: 140px; width: 95%; left: 2.5%; 
-            height: 75vh; overflow-y: auto; z-index: 10;
+            height: 75vh; overflow-y: auto; z-index: 5;
         }
         
         .lane-horse {
