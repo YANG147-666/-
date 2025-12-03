@@ -217,12 +217,15 @@ app.get('/', (req, res) => {
         .slot-empty { border: 3px dashed rgba(255, 255, 255, 0.6) !important; background: rgba(255, 255, 255, 0.1) !important; }
         .slot-img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
         
-        /* 修复1: 名字样式，强制不换行，超长省略 */
+        /* 修复大厅头像显示问题 */
         .slot-name { 
             margin-top: 10px; font-size: 1.1rem; color: #fff; text-shadow: 1px 1px 2px black; 
             width: 100%; text-align: center;
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-            padding: 0 5px; box-sizing: border-box;
+            word-wrap: break-word; /* 允许单词换行 */
+            word-break: break-all; /* 强制换行 */
+            line-height: 1.2; /* 行高调整 */
+            max-height: 2.4em; /* 限制最大高度为两行 */
+            overflow: hidden; /* 超出部分隐藏 */
         }
         
         @keyframes float { 0%,100%{transform: translateY(0);} 50%{transform: translateY(-10px);} }
