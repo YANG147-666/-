@@ -18,7 +18,7 @@ const PORT = process.env.PORT || 80;
 const BG_VIDEO_URL = 'https://6b65-key-manager-cloud-7egqyu8d6c8dc9-1330326648.tcb.qcloud.la/%E8%A7%86%E9%A2%91/bg.mp4?sign=31cf8b2581107ef391725e81e70d5fa1&t=1764764686'; 
 
 const GAME_DURATION = 60; 
-const TRACK_MAX_SCORE = 150; 
+const TRACK_MAX_SCORE = 1000; 
 
 // =========================================
 
@@ -188,8 +188,9 @@ app.get('/', (req, res) => {
         #countdown-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.85);
-            z-index: 10000; display: none;
+            z-index: 10000; 
             justify-content: center; align-items: center;
+            display: flex; /* 默认设为flex确保可见 */
         }
         #countdown-text {
             font-size: 25rem; font-weight: bold; color: gold;
@@ -377,13 +378,13 @@ app.get('/', (req, res) => {
         <div style="font-size:12px; font-weight:bold; margin-top:5px">扫码加入</div>
     </div>
 
-    <div id="countdown-overlay">
-        <div id="countdown-text"></div>
+    <div id="countdown-overlay" class="force-hide">
+        <div id="countdown-text">3</div>
     </div>
 
     <!-- 1. 大厅 -->
     <div id="view-lobby">
-        <div class="header-area"><h1 class="main-title" data-text="新年好运 · 锦鲤大奖赛">新年好运 · 锦鲤大奖赛</h1><div class="sub-title">SHAKE IT UP! 2025</div></div>
+        <div class="header-area"><h1 class="main-title" data-text="新年好运 · 锦鲤大奖赛">新年好运 · 锦鲤大奖赛</h1><div class="sub-title">摇摆 2026！& 嗨翻 2026！5</div></div>
         <div class="center-bar"><button class="btn-start" onclick="startGame()">开始比赛</button></div>
         <div id="lobby-list"></div>
     </div>
@@ -581,7 +582,8 @@ app.get('/', (req, res) => {
         socket.on('countdown_tick', (count) => {
             cdOverlay.classList.remove('force-hide');
             cdText.innerText = count > 0 ? count : 'GO!';
-            cdText.style.animation = 'none'; cdText.offsetHeight; 
+            cdText.style.animation = 'none'; 
+            cdText.offsetHeight; 
             cdText.style.animation = 'popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
         });
 
