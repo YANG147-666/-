@@ -261,18 +261,18 @@ app.get('/', (req, res) => {
 
         .track-area { 
             position: absolute; top: 140px; width: 95%; left: 2.5%; 
-            height: 75vh; overflow-y: auto; z-index: 5;
+            height: 75vh; overflow-y: visible; z-index: 5;
         }
         
         .lane-horse {
-            height: 100px; 
+            height: 80px; 
             margin-bottom: 10px; 
             position: relative;
             background: rgba(0, 0, 0, 0.2); 
             border-bottom: 2px solid rgba(255,255,255,0.2);
             display: flex; 
             align-items: center;
-            overflow: visible !important; /* 强制设置 */
+            overflow: visible;
         }
         
         .start-line { position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: white; z-index: 1; }
@@ -280,39 +280,57 @@ app.get('/', (req, res) => {
 
         .horse-runner {
             position: absolute; 
-            left: 0; top: 50%; 
+            left: 0; 
+            top: 50%; 
             transform: translateY(-50%);
             width: 100px; 
             height: 80px;
             transition: left 0.3s linear;
-            z-index: 500; 
-            overflow: hidden; /* 添加这一行 */
+            z-index: 500;
         }
         
         .horse-body {
-            font-size: 5rem; position: absolute; bottom: 0; left: 0;
+            font-size: 3rem; 
+            position: absolute; 
+            bottom: 0; 
+            left: 0;
             transform: scaleX(-1);
             filter: drop-shadow(5px 5px 5px rgba(0,0,0,0.5));
             animation: gallop 0.6s infinite alternate ease-in-out;
             z-index: 10;
         }
         .jockey-avatar {
-            position: absolute; top: 15px; left: 25px;
-            width: 45px; height: 45px;
-            border-radius: 50%; border: 3px solid gold;
-            background: white; object-fit: cover;
+            position: absolute; 
+            top: 5px; 
+            left: 15px;
+            width: 30px; 
+            height: 30px;
+            border-radius: 50%; 
+            border: 2px solid gold;
+            background: white; 
+            object-fit: cover;
             animation: bounce 0.6s infinite alternate ease-in-out;
             z-index: 11;
         }
         .runner-name {
-            position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
-            background: rgba(0,0,0,0.6); color: white; padding: 2px 8px;
-            border-radius: 10px; font-size: 0.8rem; white-space: nowrap;
+            position: absolute; 
+            top: -20px; 
+            left: 50%; 
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.6); 
+            color: white; 
+            padding: 2px 8px;
+            border-radius: 10px; 
+            font-size: 0.8rem; 
+            white-space: nowrap;
             z-index: 12;
         }
         .dust {
-            position: absolute; bottom: 5px; left: -10px;
-            font-size: 1.5rem; opacity: 0.6;
+            position: absolute; 
+            bottom: 5px; 
+            left: -10px;
+            font-size: 1rem; 
+            opacity: 0.6;
             animation: fadeOut 0.6s infinite linear;
             z-index: 9;
         }
