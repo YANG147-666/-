@@ -13,9 +13,7 @@ const WX_APP_SECRET = process.env.WX_APP_SECRET || 'ad64dad676f1bb6a6071fcb26985
 const DOMAIN = process.env.DOMAIN || 'https://shake-game-204673-6-1330326648.sh.run.tcloudbase.com';
 const PORT = process.env.PORT || 80;
 
-// 【配置】游戏时长 (60秒)
 const GAME_DURATION = 60; 
-// 【配置】赛道长度 (摇150下跑满)
 const TRACK_MAX_SCORE = 150; 
 
 // =========================================
@@ -26,13 +24,11 @@ let gameTimer = null;
 let countdownTimer = null;
 let remainingTime = GAME_DURATION;
 
-// 定时器清理函数
 function clearAllTimers() {
     if (gameTimer) { clearInterval(gameTimer); gameTimer = null; }
     if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
 }
 
-// --- Socket 逻辑 ---
 io.on('connection', (socket) => {
     socket.emit('game_state_change', gameState);
     
@@ -59,17 +55,20 @@ io.on('connection', (socket) => {
         gameState = 'countdown';
         io.emit('game_state_change', 'countdown');
         
+        // --- 修复倒计时逻辑 ---
         let prepCount = 3;
-        io.emit('countdown_tick', prepCount);
+        io.emit('countdown_tick', prepCount); // 立即显示 3
         
         countdownTimer = setInterval(() => {
             prepCount--;
-            io.emit('countdown_tick', prepCount);
-            
             if (prepCount < 0) {
+                // 倒计时结束，进入比赛
                 clearInterval(countdownTimer);
                 countdownTimer = null;
                 startGameLogic(); 
+            } else {
+                // 广播 2, 1, 0(GO)
+                io.emit('countdown_tick', prepCount);
             }
         }, 1000);
     });
@@ -130,7 +129,6 @@ function startGameLogic() {
 
 function sortPlayers() { return Object.values(players).sort((a, b) => b.score - a.score); }
 
-// --- 路由 ---
 app.get('/MP_verify_qwWEAQM3dPUfFpwd.txt', (req, res) => {
     const filePath = path.join(__dirname, 'MP_verify_qwWEAQM3dPUfFpwd.txt');
     res.sendFile(filePath); 
@@ -155,9 +153,6 @@ app.get('/wechat/callback', async (req, res) => {
     } catch (error) { res.send('登录错误'); }
 });
 
-// =================================================================
-// 🎨 大屏幕 UI V7.2 (修复头像乱码、遮挡问题)
-// =================================================================
 app.get('/', (req, res) => {
     const mobileUrl = `${DOMAIN}/mobile`;
     res.send(`
@@ -171,12 +166,10 @@ app.get('/', (req, res) => {
         @import url('https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Exo+2:wght@700&display=swap');
         body { margin: 0; padding: 0; height: 100vh; overflow: hidden; color: white; }
 
-        /* 通用：隐藏类 */
-        .hidden { display: none !important; }
+        /* 强制隐藏类 (最高优先级) */
+        .force-hide { display: none !important; }
 
-        /* ==================== 
-           PART 1: 大厅样式
-           ==================== */
+        /* 大厅 */
         #view-lobby {
             position: absolute; width: 100%; height: 100%; z-index: 10;
             font-family: 'Microsoft YaHei', sans-serif; display: flex; 
@@ -217,33 +210,25 @@ app.get('/', (req, res) => {
         .slot-empty { border: 3px dashed rgba(255, 255, 255, 0.6) !important; background: rgba(255, 255, 255, 0.1) !important; }
         .slot-img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
         
-        /* 修复大厅头像显示问题 */
+        /* 名字样式修正：单行省略 */
         .slot-name { 
             margin-top: 10px; font-size: 1.1rem; color: #fff; text-shadow: 1px 1px 2px black; 
-            width: 100%; text-align: center;
-            word-wrap: break-word; /* 允许单词换行 */
-            word-break: break-all; /* 强制换行 */
-            line-height: 1.2; /* 行高调整 */
-            max-height: 2.4em; /* 限制最大高度为两行 */
-            overflow: hidden; /* 超出部分隐藏 */
+            width: 100px; text-align: center;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        
-        @keyframes float { 0%,100%{transform: translateY(0);} 50%{transform: translateY(-10px);} }
 
-
-        /* ==================== 
-           PART 2: 赛马场 (Race View)
-           ==================== */
+        /* 赛马场 */
         #view-race {
             position: absolute; width: 100%; height: 100%; z-index: 20; display: none;
             background: radial-gradient(circle at center, #1e6b36 0%, #0d3819 100%);
             font-family: 'Microsoft YaHei', sans-serif;
         }
 
+        /* 倒计时遮罩 - ZIndex 极高 */
         #countdown-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.7);
-            z-index: 9999; /* 最高层级 */
+            background: rgba(0,0,0,0.8);
+            z-index: 10000; 
             display: none;
             justify-content: center; align-items: center;
         }
@@ -282,25 +267,25 @@ app.get('/', (req, res) => {
             display: flex; align-items: center;
         }
         
-        /* 修复2: 起跑线 Z-Index 降低为 0，防止遮挡马 */
-        .start-line { position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: white; z-index: 0; }
-        .finish-line { position: absolute; right: 0; top: 0; bottom: 0; width: 10px; background-image: repeating-linear-gradient(45deg, #000 0, #000 10px, #fff 10px, #fff 20px); z-index: 0; }
+        /* 修复：线在最底层 */
+        .start-line { position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: white; z-index: 1; }
+        .finish-line { position: absolute; right: 0; top: 0; bottom: 0; width: 10px; background-image: repeating-linear-gradient(45deg, #000 0, #000 10px, #fff 10px, #fff 20px); z-index: 1; }
 
-        /* 修复2: 马匹容器 Z-Index 提高到 999，确保在最上层 */
+        /* 修复：马匹容器 Z-Index 999 且强制 3D 渲染 */
         .horse-runner {
             position: absolute; left: 0; top: -10px;
             width: 100px; height: 80px;
             transition: left 0.3s linear;
-            z-index: 999; 
+            z-index: 999;
+            transform: translateZ(10px); /* 强制图层置顶 */
         }
         
         .horse-body {
-            font-size: 5rem; 
-            position: absolute; bottom: 0; left: 0;
+            font-size: 5rem; position: absolute; bottom: 0; left: 0;
             transform: scaleX(-1);
             filter: drop-shadow(5px 5px 5px rgba(0,0,0,0.5));
             animation: gallop 0.6s infinite alternate ease-in-out;
-            z-index: 10; /* 马身体 */
+            z-index: 10;
         }
         
         .jockey-avatar {
@@ -309,7 +294,7 @@ app.get('/', (req, res) => {
             border-radius: 50%; border: 3px solid gold;
             background: white; object-fit: cover;
             animation: bounce 0.6s infinite alternate ease-in-out;
-            z-index: 11; /* 骑手在马身上 */
+            z-index: 11;
         }
         
         .runner-name {
@@ -329,11 +314,9 @@ app.get('/', (req, res) => {
         @keyframes gallop { 0% { transform: scaleX(-1) rotate(0deg) translateY(0); } 100% { transform: scaleX(-1) rotate(-5deg) translateY(-5px); } }
         @keyframes bounce { 0% { transform: translateY(0); } 100% { transform: translateY(-5px); } }
         @keyframes fadeOut { 0% { opacity: 0.8; transform: translateX(0); } 100% { opacity: 0; transform: translateX(-20px); } }
+        @keyframes float { 0%,100%{transform: translateY(0);} 50%{transform: translateY(-10px);} }
 
-
-        /* ==================== 
-           PART 3: 结算
-           ==================== */
+        /* 结算 */
         #view-result { position: absolute; width: 100%; height: 100%; z-index: 20; display: none; background: #1a0528; }
         .podium-container { position: absolute; top: 55%; left: 50%; transform: translate(-50%, -50%); display: flex; align-items: flex-end; gap: 20px; }
         .podium-pillar { display: flex; flex-direction: column; align-items: center; position: relative; }
@@ -346,6 +329,7 @@ app.get('/', (req, res) => {
         .result-controls { position: absolute; bottom: 30px; width: 100%; text-align: center; }
         .btn-round { padding: 12px 40px; border-radius: 30px; border: none; font-size: 1.2rem; cursor: pointer; color: white; background: linear-gradient(90deg, #ff4081, #f50057); }
         
+        /* 二维码容器 */
         .qr-float { 
             position: absolute; top: 50px; right: 50px; 
             background: rgba(255,255,255,0.95); padding: 10px; border-radius: 10px; 
@@ -357,9 +341,7 @@ app.get('/', (req, res) => {
     </style>
 </head>
 <body>
-    <video autoplay muted loop playsinline class="video-bg">
-        <source src="/bg.mp4" type="video/mp4">
-    </video>
+    <video autoplay muted loop playsinline class="video-bg"><source src="/bg.mp4" type="video/mp4"></video>
     <div class="video-mask"></div>
     
     <div id="qr-box" class="qr-float">
@@ -367,6 +349,7 @@ app.get('/', (req, res) => {
         <div style="font-size:12px; font-weight:bold; margin-top:5px">扫码加入</div>
     </div>
 
+    <!-- 倒计时遮罩 -->
     <div id="countdown-overlay">
         <div id="countdown-text"></div>
     </div>
@@ -420,8 +403,6 @@ app.get('/', (req, res) => {
             for (let i = 0; i < totalSlots; i++) {
                 const p = players[i];
                 if (p) {
-                    // 修复1: 修正 onerror 写法，防止 HTML 语法错误
-                    // 修复2: 简化 DOM 结构
                     html += \`
                     <div class="slot">
                         <div class="slot-circle" style="border-color:#ffcc00; box-shadow:0 0 10px #ffcc00">
@@ -447,7 +428,6 @@ app.get('/', (req, res) => {
             players.forEach((p) => {
                 const lane = document.createElement('div');
                 lane.className = 'lane-horse';
-                
                 let pct = (p.score / leaderScore) * 90; 
                 if(pct > 92) pct = 92; 
 
@@ -469,10 +449,8 @@ app.get('/', (req, res) => {
         function renderResult(players) {
              podiumRoot.innerHTML = '';
              const top3 = players.slice(0, 3);
-             
              const rankedPlayers = [top3[1], top3[0], top3[2]];
              const rankNumbers = [2, 1, 3];
-             
              rankedPlayers.forEach((player, index) => {
                  if (!player) {
                      const div = document.createElement('div');
@@ -484,14 +462,7 @@ app.get('/', (req, res) => {
                  const rank = rankNumbers[index];
                  const div = document.createElement('div');
                  div.className = \`podium-pillar rank-\${rank}\`;
-                 div.innerHTML = \`
-                     <div class="avatar-box">
-                         <img src="\${player.avatar}" class="p-avatar" onerror="this.src='https://via.placeholder.com/100/333/fff?text=?'">
-                     </div>
-                     <div class="pillar-box">\${rank}</div>
-                     <div style="margin-top:10px; font-weight:bold">\${player.name}</div>
-                     <div style="margin-top:5px; font-size:0.9rem; color:#ccc;">\${player.score} 分</div>
-                 \`;
+                 div.innerHTML = \`<div class="avatar-box"><img src="\${player.avatar}" class="p-avatar" onerror="this.src='https://via.placeholder.com/100/333/fff?text=?'"></div><div class="pillar-box">\${rank}</div><div style="margin-top:10px; font-weight:bold">\${player.name}</div><div style="margin-top:5px; font-size:0.9rem; color:#ccc;">\${player.score} 分</div>\`;
                  podiumRoot.appendChild(div);
              });
         }
@@ -504,25 +475,25 @@ app.get('/', (req, res) => {
         socket.on('game_state_change', (state) => {
             if (state === 'waiting') {
                 viewLobby.style.display = 'flex'; viewRace.style.display = 'none'; viewResult.style.display = 'none';
-                qrBox.style.display = 'block'; 
-                cdOverlay.style.display = 'none'; 
+                qrBox.classList.remove('force-hide');
+                cdOverlay.classList.add('force-hide'); 
                 timerNum.innerText = '60';
             } else if (state === 'countdown') {
                 viewLobby.style.display = 'none'; viewRace.style.display = 'block'; viewResult.style.display = 'none';
-                qrBox.style.display = 'none'; 
-                cdOverlay.style.display = 'flex'; 
+                qrBox.classList.add('force-hide'); // 强制隐藏二维码
+                cdOverlay.classList.remove('force-hide'); // 显示倒计时
             } else if (state === 'racing') {
                 viewLobby.style.display = 'none'; viewRace.style.display = 'block'; viewResult.style.display = 'none';
-                qrBox.style.display = 'none'; 
-                cdOverlay.style.display = 'none'; 
+                qrBox.classList.add('force-hide'); 
+                cdOverlay.classList.add('force-hide'); 
             } else if (state === 'finished') {
                 viewRace.style.display = 'none'; viewResult.style.display = 'block';
-                qrBox.style.display = 'none'; 
+                qrBox.classList.add('force-hide'); 
             }
         });
 
         socket.on('countdown_tick', (count) => {
-            cdOverlay.style.display = 'flex';
+            cdOverlay.classList.remove('force-hide');
             cdText.innerText = count > 0 ? count : 'GO!';
             cdText.style.animation = 'none';
             cdText.offsetHeight; 
@@ -530,13 +501,11 @@ app.get('/', (req, res) => {
         });
 
         socket.on('time_update', (sec) => { timerNum.innerText = sec; });
-        
         socket.on('game_over', (finalPlayers) => {
             viewRace.style.display = 'none'; viewResult.style.display = 'block';
             renderResult(finalPlayers);
             confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 } });
         });
-        
         socket.on('new_barrage', (data) => {
             if(viewRace.style.display === 'none') return;
             const item = document.createElement('div');
@@ -546,7 +515,6 @@ app.get('/', (req, res) => {
             barrageContainer.appendChild(item);
             setTimeout(()=>item.remove(), 6000);
         });
-        
         renderLobby([]);
     </script>
 </body>
@@ -554,7 +522,6 @@ app.get('/', (req, res) => {
     `);
 });
 
-// --- 手机端保持不变 ---
 function renderMobilePage(userInfo) {
     const userJson = JSON.stringify({ nickname: userInfo.nickname, headimgurl: userInfo.headimgurl, openid: userInfo.openid });
     return `
@@ -607,7 +574,6 @@ function renderMobilePage(userInfo) {
     `;
 }
 
-// 添加错误处理
 app.use((err, req, res, next) => {
     console.error('服务器错误:', err);
     res.status(500).send('内部服务器错误');
