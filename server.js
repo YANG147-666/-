@@ -86,20 +86,7 @@ io.on('connection', (socket) => {
         if (gameState !== 'racing') return;
         const player = players[socket.id];
         if (player) {
-            // 动态得分系统：随着进度增加，每次摇动的收益递减
-            const baseScore = 1;
-            const progress = player.score / TRACK_MAX_SCORE;
-            // 当进度为0时，获得100%收益；当进度为100%时，只获得10%收益
-            const diminishingFactor = Math.max(0.1, 1 - progress * 0.9);
-            const scoreGain = baseScore * diminishingFactor;
-            
-            player.score += scoreGain;
-            
-            // 确保分数不超过TRACK_MAX_SCORE
-            if (player.score > TRACK_MAX_SCORE) {
-                player.score = TRACK_MAX_SCORE;
-            }
-            
+            player.score += 1; 
             io.emit('update_players', sortPlayers());
             
             if (Math.random() > 0.98) {
@@ -299,7 +286,7 @@ app.get('/', (req, res) => {
             transform: translateY(-50%);
             width: 100px; 
             height: 80px;
-            transition: left 0.3s linear;
+            transition: left 0.8s linear; /* 从0.3s改为0.8s，让移动更慢 */
             z-index: 500;
         }
         
@@ -397,7 +384,7 @@ app.get('/', (req, res) => {
 
     <!-- 1. 大厅 -->
     <div id="view-lobby">
-        <div class="header-area"><h1 class="main-title" data-text="新年好运 · 锦鲤大奖赛">新年好运 · 锦鲤大奖赛</h1><div class="sub-title">摇摆 2026！& 嗨翻 2026！5</div></div>
+        <div class="header-area"><h1 class="main-title" data-text="新年好运 · 锦鲤大奖赛">新年好运 · 锦鲤大奖赛</h1><div class="sub-title">摇摆 2026！& 嗨翻 2026！</div></div>
         <div class="center-bar"><button class="btn-start" onclick="startGame()">开始比赛</button></div>
         <div id="lobby-list"></div>
     </div>
@@ -434,7 +421,7 @@ app.get('/', (req, res) => {
         const cdText = document.getElementById('countdown-text');
         const bgLayer = document.getElementById('bg-layer');
 
-        const TRACK_MAX_SCORE = 150;
+        const TRACK_MAX_SCORE = 1000; // 与服务端保持一致
 
         // 页面加载完成后尝试播放视频
         document.addEventListener('DOMContentLoaded', function() {
@@ -528,8 +515,9 @@ app.get('/', (req, res) => {
                 lane.className = 'lane-horse';
                 lane.style.zIndex = 100 - idx; // 动态 Z-index
 
-                let pct = (p.score / leaderScore) * 90; 
-                if(pct > 92) pct = 92; 
+                // 调整移动速度，让马匹移动更慢
+                let pct = (p.score / leaderScore) * 80; // 从90%减少到80%，限制最大移动距离
+                if(pct > 85) pct = 85; // 从92%减少到85%
 
                 lane.innerHTML = \`
                     <div class="start-line"></div>
