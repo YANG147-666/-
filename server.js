@@ -359,7 +359,7 @@ app.get('/', (req, res) => {
             background: rgba(255,255,255,0.95); padding: 10px; border-radius: 10px; 
             text-align: center; color: #333; z-index: 100; 
         }
-        .barrage-item { position: absolute; background: rgba(255,255,255,0.1); backdrop-filter: blur(5px); padding: 5px 15px; border-radius: 30px; color: #fff; font-size: 0.9rem; border: 1px solid rgba(255,255,255,0.3); white-space: nowrap; animation: flyRight 6s linear forwards; z-index: 5; }
+        .barrage-item { position: absolute; background: rgba(255,255,255,0.1); backdrop-filter: blur(5px); padding: 5px 15px; border-radius: 30px; color: #fff; font-size: 0.9rem; border: 1px solid rgba(255,255,255,0.3); white-space: nowrap; animation: flyRight 12s linear forwards; z-index: 5; }
         @keyframes flyRight { from { left: -20%; } to { left: 110%; } }
     </style>
 </head>
@@ -601,7 +601,7 @@ app.get('/', (req, res) => {
             item.innerHTML = \`<img src="\${data.avatar}" style="width:20px;height:20px;border-radius:50%;vertical-align:middle" onerror="this.style.display='none'"> \${data.text}\`;
             item.style.top = Math.random() * 80 + '%';
             barrageContainer.appendChild(item);
-            setTimeout(()=>item.remove(), 6000);
+            setTimeout(()=>item.remove(), 12000);
         });
         renderLobby([]);
     </script>
