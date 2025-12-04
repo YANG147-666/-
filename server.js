@@ -86,7 +86,20 @@ io.on('connection', (socket) => {
         if (gameState !== 'racing') return;
         const player = players[socket.id];
         if (player) {
-            player.score += 1; 
+            // 动态得分系统：随着进度增加，每次摇动的收益递减
+            const baseScore = 1;
+            const progress = player.score / TRACK_MAX_SCORE;
+            // 当进度为0时，获得100%收益；当进度为100%时，只获得10%收益
+            const diminishingFactor = Math.max(0.1, 1 - progress * 0.9);
+            const scoreGain = baseScore * diminishingFactor;
+            
+            player.score += scoreGain;
+            
+            // 确保分数不超过TRACK_MAX_SCORE
+            if (player.score > TRACK_MAX_SCORE) {
+                player.score = TRACK_MAX_SCORE;
+            }
+            
             io.emit('update_players', sortPlayers());
             
             if (Math.random() > 0.98) {
