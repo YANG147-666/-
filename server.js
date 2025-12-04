@@ -17,7 +17,7 @@ const PORT = process.env.PORT || 80;
 // 比如: 'https://7368-shake-game-123456.tcb.qcloud.la/my-background.mp4'
 const BG_VIDEO_URL = 'https://6b65-key-manager-cloud-7egqyu8d6c8dc9-1330326648.tcb.qcloud.la/%E8%A7%86%E9%A2%91/bg.mp4?sign=31cf8b2581107ef391725e81e70d5fa1&t=1764764686'; 
 
-const GAME_DURATION = 60; 
+const GAME_DURATION = 30; 
 const TRACK_MAX_SCORE = 1000; 
 
 // =========================================
@@ -355,7 +355,7 @@ app.get('/', (req, res) => {
         .btn-round { padding: 12px 40px; border-radius: 30px; border: none; font-size: 1.2rem; cursor: pointer; color: white; background: linear-gradient(90deg, #ff4081, #f50057); }
         
         .qr-float { 
-            position: absolute; top: 50px; right: 50px; 
+            position: absolute; top: 30px; right: 30px; 
             background: rgba(255,255,255,0.95); padding: 10px; border-radius: 10px; 
             text-align: center; color: #333; z-index: 100; 
         }
