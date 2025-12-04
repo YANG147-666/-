@@ -35,7 +35,7 @@ function clearAllTimers() {
 
 io.on('connection', (socket) => {
     socket.emit('game_state_change', gameState);
-    
+
     socket.on('join_game', (userInfo) => {
         if (!players[socket.id]) {
             players[socket.id] = {
