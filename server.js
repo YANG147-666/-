@@ -392,7 +392,7 @@ app.get('/', (req, res) => {
     <!-- 2. 赛马场 -->
     <div id="view-race">
         <div class="track-bg-lines"></div>
-        <div class="timer-panel"><div id="timer-num">60</div><div class="timer-label">冲刺倒计时</div></div>
+        <div class="timer-panel"><div id="timer-num">30</div><div class="timer-label">冲刺倒计时</div></div>
         <div id="barrage-container" style="position:absolute; top:10%; width:100%; height:30%; overflow:hidden; pointer-events:none"></div>
         
         <div class="track-area" id="tracks"></div>
