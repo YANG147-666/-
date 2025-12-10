@@ -286,7 +286,7 @@ app.get('/', (req, res) => {
             transform: translateY(-50%);
             width: 100px; 
             height: 80px;
-            transition: left 0.8s linear; /* 从0.3s改为0.8s，让移动更慢 */
+            transition: left 0.5s linear; /* 从0.3s改为0.8s，让移动更慢 */
             z-index: 500;
         }
         
