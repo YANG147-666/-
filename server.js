@@ -86,16 +86,27 @@ io.on('connection', (socket) => {
         if (gameState !== 'racing') return;
         const player = players[socket.id];
         if (player) {
-            player.score += 1; 
-            io.emit('update_players', sortPlayers());
+            // 添加双倍得分机制 - 30%几率获得双倍积分
+            const isDouble = Math.random() <= 0.3;
+            const scoreToAdd = isDouble ? 2 : 1;
+            player.score += scoreToAdd;
             
-            if (Math.random() > 0.98) {
+            // 如果是双倍得分，发送特殊弹幕
+            if (isDouble) {
+                const cheers = ['✨ 双倍得分!', '🌟 幸运之星!', '🎉 超级加倍!', '💎 钻石得分!'];
+                io.emit('new_barrage', { 
+                    avatar: player.avatar, 
+                    text: cheers[Math.floor(Math.random()*cheers.length)] 
+                });
+            } else if (Math.random() > 0.98) {
                 const cheers = ['🏇 驾！', '⚡️ 绝尘而去！', '🔥 冲啊！', '🚀 遥遥领先！'];
                 io.emit('new_barrage', { 
                     avatar: player.avatar, 
                     text: cheers[Math.floor(Math.random()*cheers.length)] 
                 });
             }
+            
+            io.emit('update_players', sortPlayers());
         }
     });
 
@@ -300,6 +311,13 @@ app.get('/', (req, res) => {
             animation: gallop 0.6s infinite alternate ease-in-out;
             z-index: 10;
         }
+        
+        .horse-body.double-score {
+            filter: drop-shadow(5px 5px 5px rgba(0,0,0,0.5)) hue-rotate(180deg);
+            animation: gallopDouble 0.3s infinite alternate ease-in-out;
+            color: gold;
+        }
+        
         .jockey-avatar {
             position: absolute; 
             top: 5px; 
@@ -313,6 +331,7 @@ app.get('/', (req, res) => {
             animation: bounce 0.6s infinite alternate ease-in-out;
             z-index: 11;
         }
+        
         .runner-name {
             position: absolute; 
             top: -20px; 
@@ -326,6 +345,14 @@ app.get('/', (req, res) => {
             white-space: nowrap;
             z-index: 12;
         }
+        
+        .runner-name.double-score {
+            background: gold;
+            color: black;
+            font-weight: bold;
+            box-shadow: 0 0 10px gold;
+        }
+        
         .dust {
             position: absolute; 
             bottom: 5px; 
@@ -337,6 +364,7 @@ app.get('/', (req, res) => {
         }
 
         @keyframes gallop { 0% { transform: scaleX(-1) rotate(0deg) translateY(0); } 100% { transform: scaleX(-1) rotate(-5deg) translateY(-5px); } }
+        @keyframes gallopDouble { 0% { transform: scaleX(-1) rotate(0deg) translateY(0); } 100% { transform: scaleX(-1) rotate(10deg) translateY(-10px); } }
         @keyframes bounce { 0% { transform: translateY(0); } 100% { transform: translateY(-5px); } }
         @keyframes fadeOut { 0% { opacity: 0.8; transform: translateX(0); } 100% { opacity: 0; transform: translateX(-20px); } }
         @keyframes float { 0%,100%{transform: translateY(0);} 50%{transform: translateY(-10px);} }
@@ -361,6 +389,26 @@ app.get('/', (req, res) => {
         }
         .barrage-item { position: absolute; background: rgba(255,255,255,0.1); backdrop-filter: blur(5px); padding: 5px 15px; border-radius: 30px; color: #fff; font-size: 0.9rem; border: 1px solid rgba(255,255,255,0.3); white-space: nowrap; animation: flyRight 12s linear forwards; z-index: 5; }
         @keyframes flyRight { from { left: -20%; } to { left: 110%; } }
+        
+        /* 双倍得分特效 */
+        .double-score-effect {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3rem;
+            font-weight: bold;
+            color: gold;
+            text-shadow: 0 0 10px red;
+            z-index: 10000;
+            pointer-events: none;
+            animation: floatUp 1.5s forwards;
+        }
+        
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translate(-50%, -50%); }
+            100% { opacity: 0; transform: translate(-50%, -70%); }
+        }
     </style>
 </head>
 <body>
@@ -519,13 +567,16 @@ app.get('/', (req, res) => {
                 let pct = (p.score / leaderScore) * 80; // 从90%减少到80%，限制最大移动距离
                 if(pct > 85) pct = 85; // 从92%减少到85%
 
+                // 检查玩家是否有双倍得分状态
+                const isDoubleScore = p.hasDoubleScore ? 'double-score' : '';
+                
                 lane.innerHTML = \`
                     <div class="start-line"></div>
                     <div class="finish-line"></div>
                     
                     <div class="horse-runner" style="left: \${pct}%">
-                        <div class="runner-name">\${p.name}</div>
-                        <div class="horse-body">🏇</div>
+                        <div class="runner-name \${isDoubleScore}">\${p.name}</div>
+                        <div class="horse-body \${isDoubleScore}">🏇</div>
                         <img src="\${p.avatar}" class="jockey-avatar" onerror="this.style.display='none'">
                         <div class="dust">💨</div>
                     </div>
@@ -543,14 +594,14 @@ app.get('/', (req, res) => {
                  if (!player) {
                      const div = document.createElement('div');
                      div.className = \`podium-pillar rank-\${rankNumbers[index]}\`;
-                     div.innerHTML = \`<div class="avatar-box"><div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#333;color:#999;">?</div></div><div class="pillar-box">\${rankNumbers[index]}</div>\`;
+                     div.innerHTML = \`<div class="avatar-box"><div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#333;color:#999;">?</div></div><div class="pillar-box">\${rankNumbers[index]}\`;</div>
                      podiumRoot.appendChild(div);
                      return;
                  }
                  const rank = rankNumbers[index];
                  const div = document.createElement('div');
                  div.className = \`podium-pillar rank-\${rank}\`;
-                 div.innerHTML = \`<div class="avatar-box"><img src="\${player.avatar}" class="p-avatar" onerror="this.src='https://via.placeholder.com/100/333/fff?text=?'"></div><div class="pillar-box">\${rank}</div><div style="margin-top:10px; font-weight:bold">\${player.name}</div><div style="margin-top:5px; font-size:0.9rem; color:#ccc;">\${player.score} 分</div>\`;
+                 div.innerHTML = \`<div class="avatar-box"><img src="\${player.avatar}" class="p-avatar" onerror="this.src='https://via.placeholder.com/100/333/fff?text=?'"></div><div class="pillar-box">\${rank}</div><div style="margin-top:10px; font-weight:bold">\${player.name}</div><div style="margin-top:5px; font-size:0.9rem; color:#ccc;">\${player.score} 分</div>\`;</div>
                  podiumRoot.appendChild(div);
              });
         }
@@ -603,6 +654,24 @@ app.get('/', (req, res) => {
             barrageContainer.appendChild(item);
             setTimeout(()=>item.remove(), 12000);
         });
+        
+        // 监听双倍得分事件
+        socket.on('double_score_effect', () => {
+            showDoubleScoreEffect();
+        });
+        
+        // 显示双倍得分特效
+        function showDoubleScoreEffect() {
+            const effect = document.createElement('div');
+            effect.className = 'double-score-effect';
+            effect.textContent = 'DOUBLE SCORE!';
+            document.body.appendChild(effect);
+            
+            setTimeout(() => {
+                effect.remove();
+            }, 1500);
+        }
+        
         renderLobby([]);
     </script>
 </body>
@@ -626,6 +695,19 @@ function renderMobilePage(userInfo) {
             .btn { background: linear-gradient(90deg, #ffd700, #ff8c00); color: #8b0000; border: none; padding: 15px 50px; border-radius: 50px; font-size: 1.2rem; font-weight: bold; box-shadow: 0 0 20px rgba(255, 215, 0, 0.5); }
             #shake-icon { font-size: 5rem; margin: 20px; filter: drop-shadow(0 0 10px gold); }
             .hidden { display: none; }
+            
+            /* 双倍得分动画 */
+            @keyframes doubleShake {
+                0% { transform: scale(1); }
+                50% { transform: scale(1.2); }
+                100% { transform: scale(1); }
+            }
+            
+            .double-score {
+                animation: doubleShake 0.5s ease-in-out;
+                color: gold;
+                text-shadow: 0 0 10px red;
+            }
         </style>
     </head>
     <body>
@@ -635,6 +717,8 @@ function renderMobilePage(userInfo) {
         <script>
             const socket = io();
             const user = ${userJson};
+            const shakeIcon = document.getElementById('shake-icon');
+            
             async function join() {
                 if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') { try { await DeviceMotionEvent.requestPermission(); } catch(e){} }
                 socket.emit('join_game', user);
@@ -649,12 +733,32 @@ function renderMobilePage(userInfo) {
                             socket.emit('shake');
                             last = now;
                             if(navigator.vibrate) navigator.vibrate(50);
+                            
+                            // 添加摇动动画效果
+                            shakeIcon.classList.remove('double-score');
+                            void shakeIcon.offsetWidth; // 触发重绘
+                            shakeIcon.classList.add('double-score');
                         }
                     }
                 });
                 socket.on('game_state_change', s => {
                     if(s==='racing') document.getElementById('status').innerText = '策马奔腾！';
                     if(s==='finished') document.getElementById('status').innerText = '冲线成功';
+                });
+                
+                // 监听双倍得分事件
+                socket.on('double_score', () => {
+                    // 添加双倍得分视觉效果
+                    document.getElementById('status').textContent = '双倍得分!';
+                    document.getElementById('status').style.color = 'gold';
+                    document.getElementById('status').style.textShadow = '0 0 10px red';
+                    
+                    // 2秒后恢复原状
+                    setTimeout(() => {
+                        document.getElementById('status').textContent = '策马奔腾！';
+                        document.getElementById('status').style.color = '';
+                        document.getElementById('status').style.textShadow = '';
+                    }, 2000);
                 });
             }
         </script>
