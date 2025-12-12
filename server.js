@@ -37,12 +37,17 @@ io.on('connection', (socket) => {
     socket.emit('game_state_change', gameState);
 
     socket.on('join_game', (userInfo) => {
+        // 安全处理用户输入，防止XSS攻击
+        const sanitizedName = sanitizeString(userInfo.nickname);
+        const sanitizedAvatar = sanitizeString(userInfo.headimgurl);
+        
         if (!players[socket.id]) {
             players[socket.id] = {
                 id: socket.id,
-                name: userInfo.nickname,
-                avatar: userInfo.headimgurl,
-                score: 0
+                name: sanitizedName,
+                avatar: sanitizedAvatar,
+                score: 0,
+                hasDoubleScore: false
             };
             io.emit('update_players', sortPlayers());
             socket.emit('game_state_change', gameState);
@@ -53,7 +58,10 @@ io.on('connection', (socket) => {
         if (gameState === 'racing' || gameState === 'countdown') return;
         
         clearAllTimers();
-        Object.keys(players).forEach(id => players[id].score = 0);
+        Object.keys(players).forEach(id => {
+            players[id].score = 0;
+            players[id].hasDoubleScore = false;
+        });
         io.emit('update_players', sortPlayers());
         
         gameState = 'countdown';
@@ -77,7 +85,10 @@ io.on('connection', (socket) => {
         clearAllTimers();
         gameState = 'waiting';
         remainingTime = GAME_DURATION;
-        Object.keys(players).forEach(id => players[id].score = 0);
+        Object.keys(players).forEach(id => {
+            players[id].score = 0;
+            players[id].hasDoubleScore = false;
+        });
         io.emit('update_players', sortPlayers());
         io.emit('game_state_change', 'waiting');
     });
@@ -90,6 +101,7 @@ io.on('connection', (socket) => {
             const isDouble = Math.random() <= 0.3;
             const scoreToAdd = isDouble ? 2 : 1;
             player.score += scoreToAdd;
+            player.hasDoubleScore = isDouble;
             
             // 如果是双倍得分，发送特殊弹幕
             if (isDouble) {
@@ -98,6 +110,9 @@ io.on('connection', (socket) => {
                     avatar: player.avatar, 
                     text: cheers[Math.floor(Math.random()*cheers.length)] 
                 });
+                
+                // 向特定用户发送双倍得分通知
+                socket.emit('double_score');
             } else if (Math.random() > 0.98) {
                 const cheers = ['🏇 驾！', '⚡️ 绝尘而去！', '🔥 冲啊！', '🚀 遥遥领先！'];
                 io.emit('new_barrage', { 
@@ -107,6 +122,14 @@ io.on('connection', (socket) => {
             }
             
             io.emit('update_players', sortPlayers());
+            
+            // 重置双倍得分状态
+            setTimeout(() => {
+                if (player && player.hasDoubleScore) {
+                    player.hasDoubleScore = false;
+                    io.emit('update_players', sortPlayers());
+                }
+            }, 2000);
         }
     });
 
@@ -117,6 +140,12 @@ io.on('connection', (socket) => {
         }
     });
 });
+
+// 字符串安全处理函数
+function sanitizeString(str) {
+    if (!str) return '';
+    return str.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 
 function startGameLogic() {
     gameState = 'racing';
@@ -161,7 +190,10 @@ app.get('/wechat/callback', async (req, res) => {
         const { access_token, openid } = tokenResp.data;
         const userResp = await axios.get(`https://api.weixin.qq.com/sns/userinfo?access_token=${access_token}&openid=${openid}&lang=zh_CN`, { httpsAgent: ignoreSSL });
         res.send(renderMobilePage(userResp.data));
-    } catch (error) { res.send('登录错误'); }
+    } catch (error) { 
+        console.error('登录错误:', error);
+        res.status(500).send('登录错误'); 
+    }
 });
 
 // =================================================================
@@ -409,6 +441,16 @@ app.get('/', (req, res) => {
             0% { opacity: 1; transform: translate(-50%, -50%); }
             100% { opacity: 0; transform: translate(-50%, -70%); }
         }
+        
+        /* 弹幕容器优化 */
+        #barrage-container {
+            position: absolute;
+            top: 10%;
+            width: 100%;
+            height: 30%;
+            overflow: hidden;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
@@ -441,7 +483,7 @@ app.get('/', (req, res) => {
     <div id="view-race">
         <div class="track-bg-lines"></div>
         <div class="timer-panel"><div id="timer-num">30</div><div class="timer-label">冲刺倒计时</div></div>
-        <div id="barrage-container" style="position:absolute; top:10%; width:100%; height:30%; overflow:hidden; pointer-events:none"></div>
+        <div id="barrage-container"></div>
         
         <div class="track-area" id="tracks"></div>
     </div>
@@ -470,9 +512,47 @@ app.get('/', (req, res) => {
         const bgLayer = document.getElementById('bg-layer');
 
         const TRACK_MAX_SCORE = 1000; // 与服务端保持一致
+        let barragePool = []; // 弹幕对象池
+        const MAX_BARRAGES = 20; // 最大弹幕数量
+
+        // 初始化弹幕对象池
+        function initBarragePool() {
+            for (let i = 0; i < MAX_BARRAGES; i++) {
+                const item = document.createElement('div');
+                item.className = 'barrage-item hidden';
+                barrageContainer.appendChild(item);
+                barragePool.push({
+                    element: item,
+                    inUse: false
+                });
+            }
+        }
+
+        // 获取可用的弹幕元素
+        function getAvailableBarrage() {
+            for (let barrage of barragePool) {
+                if (!barrage.inUse) {
+                    barrage.inUse = true;
+                    barrage.element.classList.remove('hidden');
+                    return barrage.element;
+                }
+            }
+            // 如果没有可用的，返回null
+            return null;
+        }
+
+        // 释放弹幕元素
+        function releaseBarrage(element) {
+            element.classList.add('hidden');
+            const barrage = barragePool.find(b => b.element === element);
+            if (barrage) {
+                barrage.inUse = false;
+            }
+        }
 
         // 页面加载完成后尝试播放视频
         document.addEventListener('DOMContentLoaded', function() {
+            initBarragePool();
             attemptVideoPlay();
         });
 
@@ -539,9 +619,9 @@ app.get('/', (req, res) => {
                     html += \`
                     <div class="slot">
                         <div class="slot-circle" style="border-color:#ffcc00; box-shadow:0 0 10px #ffcc00">
-                            <img src="\${p.avatar}" class="slot-img" onerror="this.src='https://via.placeholder.com/100/333/fff?text=?'">
+                            <img src="\${escapeHtml(p.avatar)}" class="slot-img" onerror="this.src='https://via.placeholder.com/100/333/fff?text=?'">
                         </div>
-                        <div class="slot-name">\${p.name}</div>
+                        <div class="slot-name">\${escapeHtml(p.name)}</div>
                     </div>\`;
                 } else {
                     html += \`
@@ -555,34 +635,53 @@ app.get('/', (req, res) => {
         }
 
         function renderTracks(players) {
-            tracksDiv.innerHTML = '';
+            // 使用差异更新而不是完全重绘
             const leaderScore = players.length > 0 ? Math.max(players[0].score, TRACK_MAX_SCORE) : TRACK_MAX_SCORE;
 
             players.forEach((p, idx) => {
-                const lane = document.createElement('div');
-                lane.className = 'lane-horse';
-                lane.style.zIndex = 100 - idx; // 动态 Z-index
+                // 查找已存在的赛道元素或创建新元素
+                let lane = tracksDiv.children[idx];
+                if (!lane) {
+                    lane = document.createElement('div');
+                    lane.className = 'lane-horse';
+                    tracksDiv.appendChild(lane);
+                }
+                
+                lane.style.zIndex = 100 - idx;
 
-                // 调整移动速度，让马匹移动更慢
-                let pct = (p.score / leaderScore) * 80; // 从90%减少到80%，限制最大移动距离
-                if(pct > 85) pct = 85; // 从92%减少到85%
+                // 计算位置
+                let pct = (p.score / leaderScore) * 80;
+                if(pct > 85) pct = 85;
 
                 // 检查玩家是否有双倍得分状态
                 const isDoubleScore = p.hasDoubleScore ? 'double-score' : '';
                 
-                lane.innerHTML = \`
-                    <div class="start-line"></div>
-                    <div class="finish-line"></div>
-                    
-                    <div class="horse-runner" style="left: \${pct}%">
-                        <div class="runner-name \${isDoubleScore}">\${p.name}</div>
-                        <div class="horse-body \${isDoubleScore}">🏇</div>
-                        <img src="\${p.avatar}" class="jockey-avatar" onerror="this.style.display='none'">
-                        <div class="dust">💨</div>
-                    </div>
+                // 更新马匹位置和样式
+                const horseRunner = lane.querySelector('.horse-runner') || document.createElement('div');
+                if (!horseRunner.classList.contains('horse-runner')) {
+                    horseRunner.className = 'horse-runner';
+                    lane.innerHTML = \`
+                        <div class="start-line"></div>
+                        <div class="finish-line"></div>
+                        \${horseRunner.outerHTML}
+                    `;
+                }
+                
+                horseRunner.style.left = \`\${pct}%\`;
+                
+                // 更新马匹内容
+                horseRunner.innerHTML = \`
+                    <div class="runner-name \${isDoubleScore}">\${escapeHtml(p.name)}</div>
+                    <div class="horse-body \${isDoubleScore}">🏇</div>
+                    <img src="\${escapeHtml(p.avatar)}" class="jockey-avatar" onerror="this.style.display='none'">
+                    <div class="dust">💨</div>
                 \`;
-                tracksDiv.appendChild(lane);
             });
+            
+            // 移除多余的赛道
+            while (tracksDiv.children.length > players.length) {
+                tracksDiv.removeChild(tracksDiv.lastChild);
+            }
         }
 
         function renderResult(players) {
@@ -601,9 +700,22 @@ app.get('/', (req, res) => {
                  const rank = rankNumbers[index];
                  const div = document.createElement('div');
                  div.className = \`podium-pillar rank-\${rank}\`;
-                 div.innerHTML = \`<div class="avatar-box"><img src="\${player.avatar}" class="p-avatar" onerror="this.src='https://via.placeholder.com/100/333/fff?text=?'"></div><div class="pillar-box">\${rank}</div><div style="margin-top:10px; font-weight:bold">\${player.name}</div><div style="margin-top:5px; font-size:0.9rem; color:#ccc;">\${player.score} 分</div>\`;</div>
+                 div.innerHTML = \`<div class="avatar-box"><img src="\${escapeHtml(player.avatar)}" class="p-avatar" onerror="this.src='https://via.placeholder.com/100/333/fff?text=?'"></div><div class="pillar-box">\${rank}</div><div style="margin-top:10px; font-weight:bold">\${escapeHtml(player.name)}</div><div style="margin-top:5px; font-size:0.9rem; color:#ccc;">\${player.score} 分</div>\`;</div>
                  podiumRoot.appendChild(div);
              });
+        }
+
+        // HTML转义函数，防止XSS攻击
+        function escapeHtml(text) {
+            if (!text) return '';
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, function(m) { return map[m]; });
         }
 
         socket.on('update_players', (players) => {
@@ -645,18 +757,27 @@ app.get('/', (req, res) => {
             renderResult(finalPlayers);
             confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 } });
         });
+        
         socket.on('new_barrage', (data) => {
             if(viewRace.style.display === 'none') return;
-            const item = document.createElement('div');
-            item.className = 'barrage-item';
-            item.innerHTML = \`<img src="\${data.avatar}" style="width:20px;height:20px;border-radius:50%;vertical-align:middle" onerror="this.style.display='none'"> \${data.text}\`;
+            
+            const item = getAvailableBarrage();
+            if (!item) return; // 如果没有可用的弹幕元素，则不显示
+            
+            item.innerHTML = \`
+                <img src="\${escapeHtml(data.avatar)}" style="width:20px;height:20px;border-radius:50%;vertical-align:middle" onerror="this.style.display='none'"> 
+                \${escapeHtml(data.text)}
+            \`;
             item.style.top = Math.random() * 80 + '%';
-            barrageContainer.appendChild(item);
-            setTimeout(()=>item.remove(), 12000);
+            
+            // 动画结束后释放弹幕元素
+            setTimeout(() => {
+                releaseBarrage(item);
+            }, 12000);
         });
         
         // 监听双倍得分事件
-        socket.on('double_score_effect', () => {
+        socket.on('double_score', () => {
             showDoubleScoreEffect();
         });
         
@@ -668,7 +789,9 @@ app.get('/', (req, res) => {
             document.body.appendChild(effect);
             
             setTimeout(() => {
-                effect.remove();
+                if (effect.parentNode) {
+                    effect.parentNode.removeChild(effect);
+                }
             }, 1500);
         }
         
@@ -681,7 +804,16 @@ app.get('/', (req, res) => {
 
 // --- 手机端保持不变 ---
 function renderMobilePage(userInfo) {
-    const userJson = JSON.stringify({ nickname: userInfo.nickname, headimgurl: userInfo.headimgurl, openid: userInfo.openid });
+    // 安全处理用户信息
+    const sanitizedName = sanitizeString(userInfo.nickname);
+    const sanitizedAvatar = sanitizeString(userInfo.headimgurl);
+    
+    const userJson = JSON.stringify({ 
+        nickname: sanitizedName, 
+        headimgurl: sanitizedAvatar, 
+        openid: sanitizeString(userInfo.openid) 
+    });
+    
     return `
     <!DOCTYPE html>
     <html lang="zh">
@@ -711,28 +843,56 @@ function renderMobilePage(userInfo) {
         </style>
     </head>
     <body>
-        <div id="setup"><img src="${userInfo.headimgurl}" class="avatar" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PGNpcmNsZSBjeD0iNTAiIGN5PSI0MCIgcj0iMjAiIGZpbGw9IiNmZmYiLz48Y2lyY2xlIGN4PSI1MCIgY3k9IjgwIiByPSIzMCIgZmlsbD0iI2ZmZiIvPjwvc3ZnPg=='"><h2>${userInfo.nickname}</h2><button class="btn" onclick="join()">🚀 上马参战</button></div>
-        <div id="game" class="hidden"><h2 id="status">等待发令...</h2><div id="shake-icon">🏇</div></div>
+        <div id="setup">
+            <img src="${sanitizedAvatar}" class="avatar" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PGNpcmNsZSBjeD0iNTAiIGN5PSI0MCIgcj0iMjAiIGZpbGw9IiNmZmYiLz48Y2lyY2xlIGN4PSI1MCIgY3k9IjgwIiByPSIzMCIgZmlsbD0iI2ZmZiIvPjwvc3ZnPg=='">
+            <h2>${sanitizedName}</h2>
+            <button class="btn" onclick="join()">🚀 上马参战</button>
+        </div>
+        <div id="game" class="hidden">
+            <h2 id="status">等待发令...</h2>
+            <div id="shake-icon">🏇</div>
+        </div>
         <script src="/socket.io/socket.io.js"></script>
         <script>
             const socket = io();
             const user = ${userJson};
             const shakeIcon = document.getElementById('shake-icon');
+            let lastShakeTime = 0;
             
             async function join() {
-                if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') { try { await DeviceMotionEvent.requestPermission(); } catch(e){} }
+                // 请求设备方向权限（iOS 13+）
+                if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+                    try {
+                        const permissionState = await DeviceMotionEvent.requestPermission();
+                        if (permissionState !== 'granted') {
+                            alert('需要授予运动传感器权限才能参与游戏');
+                            return;
+                        }
+                    } catch(error) {
+                        console.error('请求设备方向权限失败:', error);
+                        alert('无法获取运动传感器权限，请检查浏览器设置');
+                        return;
+                    }
+                }
+                
                 socket.emit('join_game', user);
                 document.getElementById('setup').classList.add('hidden');
                 document.getElementById('game').classList.remove('hidden');
-                let last = 0;
+                
+                // 添加防抖处理，避免过于频繁的摇动事件
                 window.addEventListener('devicemotion', e => {
                     const now = Date.now();
-                    if(now - last > 100) {
+                    // 限制每100ms最多发送一次摇动事件
+                    if(now - lastShakeTime > 100) {
                         let acc = e.acceleration || e.accelerationIncludingGravity;
-                        if((Math.abs(acc.x)+Math.abs(acc.y)+Math.abs(acc.z)) > 15) {
+                        if(acc && (Math.abs(acc.x) + Math.abs(acc.y) + Math.abs(acc.z)) > 15) {
                             socket.emit('shake');
-                            last = now;
-                            if(navigator.vibrate) navigator.vibrate(50);
+                            lastShakeTime = now;
+                            
+                            // 触发震动反馈（如果支持）
+                            if(navigator.vibrate) {
+                                navigator.vibrate(50);
+                            }
                             
                             // 添加摇动动画效果
                             shakeIcon.classList.remove('double-score');
@@ -741,23 +901,30 @@ function renderMobilePage(userInfo) {
                         }
                     }
                 });
+                
                 socket.on('game_state_change', s => {
-                    if(s==='racing') document.getElementById('status').innerText = '策马奔腾！';
-                    if(s==='finished') document.getElementById('status').innerText = '冲线成功';
+                    const statusElement = document.getElementById('status');
+                    if(s === 'racing') {
+                        statusElement.innerText = '策马奔腾！';
+                    } else if(s === 'finished') {
+                        statusElement.innerText = '冲线成功';
+                    }
                 });
                 
                 // 监听双倍得分事件
                 socket.on('double_score', () => {
+                    const statusElement = document.getElementById('status');
                     // 添加双倍得分视觉效果
-                    document.getElementById('status').textContent = '双倍得分!';
-                    document.getElementById('status').style.color = 'gold';
-                    document.getElementById('status').style.textShadow = '0 0 10px red';
+                    const originalText = statusElement.textContent;
+                    statusElement.textContent = '双倍得分!';
+                    statusElement.style.color = 'gold';
+                    statusElement.style.textShadow = '0 0 10px red';
                     
                     // 2秒后恢复原状
                     setTimeout(() => {
-                        document.getElementById('status').textContent = '策马奔腾！';
-                        document.getElementById('status').style.color = '';
-                        document.getElementById('status').style.textShadow = '';
+                        statusElement.textContent = '策马奔腾！';
+                        statusElement.style.color = '';
+                        statusElement.style.textShadow = '';
                     }, 2000);
                 });
             }
@@ -767,10 +934,15 @@ function renderMobilePage(userInfo) {
     `;
 }
 
-// 添加错误处理
+// 添加更完善的错误处理
 app.use((err, req, res, next) => {
-    console.error('服务器错误:', err);
+    console.error('服务器错误:', err.stack);
     res.status(500).send('内部服务器错误');
+});
+
+// 404错误处理
+app.use((req, res) => {
+    res.status(404).send('页面未找到');
 });
 
 http.listen(PORT, '0.0.0.0', () => {
